@@ -13,6 +13,16 @@ def calcular_longitud_linea_vida(anclajes):
         longitud += calcular_distancia(anclajes[i-1], anclajes[i])
     return longitud
 
+def detectar_interseccion(p1, p2, f):
+    # Generar una serie de puntos entre p1 y p2
+    x_vals = np.linspace(p1[0], p2[0], 100)
+    y_vals_linea = np.linspace(p1[1], p2[1], 100)
+
+    for x, y in zip(x_vals, y_vals_linea):
+        if y < f(x):
+            return True  # La recta corta la cornisa
+    return False
+
 def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
     x = symbols('x')
     f = lambdify(x, sympify(expr), 'numpy')
@@ -38,7 +48,16 @@ def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
         distancia_acumulada += d
 
         if distancia_acumulada >= distancia_maxima:
-            anclajes.append(p2)
+            # Verificamos si la línea entre los puntos actuales corta la cornisa
+            if detectar_interseccion(anclajes[-1], p2, f):
+                # Si corta la cornisa, añadimos más puntos
+                x_interp = np.linspace(anclajes[-1][0], p2[0], 10)
+                y_interp = f(x_interp)
+                for xi, yi in zip(x_interp[1:], y_interp[1:]):
+                    anclajes.append((xi, yi))
+            else:
+                anclajes.append(p2)
+
             distancia_acumulada = 0.0
 
     # Calcular la longitud de la línea de vida
