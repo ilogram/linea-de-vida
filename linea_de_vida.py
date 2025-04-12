@@ -24,14 +24,16 @@ def normal_a_funcion(f, x_val, distancia_ortogonal):
     # Calculamos la pendiente de la tangente
     m_tangente = f_prime.subs(x, x_val)
     
+    # Convertir a tipo float
+    m_tangente = float(m_tangente)
+
     # La pendiente de la normal es el negativo recíproco de la pendiente de la tangente
     m_normal = -1 / m_tangente
 
-    # Coordenadas de la normal a distancia 0.1 metros
+    # Calculamos el desplazamiento ortogonal
     dx = distancia_ortogonal / np.sqrt(1 + m_normal ** 2)
     dy = m_normal * dx
 
-    # Ajuste para la normal
     return dx, dy
 
 
