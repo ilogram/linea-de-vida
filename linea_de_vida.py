@@ -23,6 +23,9 @@ def normal_a_funcion(expr, x_val, distancia):
     # Evaluamos la derivada en x_val para obtener la pendiente de la tangente
     pendiente_tangente = f_prime.subs(x, x_val)
     
+    # Aseguramos que pendiente_tangente sea un número flotante
+    pendiente_tangente = float(pendiente_tangente)  # Convertimos a float si es necesario
+    
     # La pendiente normal es la opuesta a la tangente (-1/m)
     pendiente_normal = -1 / pendiente_tangente if pendiente_tangente != 0 else float('inf')
     
