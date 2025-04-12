@@ -4,11 +4,10 @@ import matplotlib.pyplot as plt
 import math
 from sympy import symbols, lambdify, sympify, diff
 
-# Definir x como variable simbólica
-x = symbols('x')
 
 def calcular_distancia(p1, p2):
     return np.linalg.norm(np.array(p1) - np.array(p2))
+
 
 def calcular_longitud_linea_vida(anclajes):
     longitud = 0.0
@@ -16,42 +15,41 @@ def calcular_longitud_linea_vida(anclajes):
         longitud += calcular_distancia(anclajes[i-1], anclajes[i])
     return longitud
 
-def normal_a_funcion(expr, x_val, distancia):
-    # Derivada simbólica de la función con respecto a x
-    f_prime = diff(expr, x)
-    
-    # Evaluamos la derivada en x_val para obtener la pendiente de la tangente
-    pendiente_tangente = f_prime.subs(x, x_val)
-    
-    # Aseguramos que pendiente_tangente sea un número flotante
-    pendiente_tangente = float(pendiente_tangente)  # Convertimos a float si es necesario
-    
-    # La pendiente normal es la opuesta a la tangente (-1/m)
-    pendiente_normal = -1 / pendiente_tangente if pendiente_tangente != 0 else float('inf')
-    
-    # Normalizada a distancia ortogonal (distancia de 0.1m)
-    dx = distancia / np.sqrt(1 + pendiente_normal**2)
-    dy = pendiente_normal * dx
 
+def normal_a_funcion(f, x_val, distancia_ortogonal):
+    # Derivada de la función
+    x = symbols('x')
+    f_prime = diff(f, x)
+
+    # Calculamos la pendiente de la tangente
+    m_tangente = f_prime.subs(x, x_val)
+    
+    # La pendiente de la normal es el negativo recíproco de la pendiente de la tangente
+    m_normal = -1 / m_tangente
+
+    # Coordenadas de la normal a distancia 0.1 metros
+    dx = distancia_ortogonal / np.sqrt(1 + m_normal ** 2)
+    dy = m_normal * dx
+
+    # Ajuste para la normal
     return dx, dy
 
-def detectar_interseccion(p1, p2, f):
-    """
-    Detecta si el segmento de línea entre p1 y p2 cruza la cornisa definida por la función f.
-    """
-    # Calculamos el valor de la función f para los puntos x de p1 y p2
-    y1 = f(p1[0])  # Y de p1 según la función
-    y2 = f(p2[0])  # Y de p2 según la función
 
-    # Verificamos si ambos puntos están en el mismo lado de la función
-    # Si están en lados opuestos, significa que hay una intersección
-    if (p1[1] > y1 and p2[1] < y2) or (p1[1] < y1 and p2[1] > y2):
-        return True
-    return False
+def detectar_interseccion(p1, p2, f):
+    x_vals = np.linspace(p1[0], p2[0], 1000)
+    y_vals = f(x_vals)
+
+    for i in range(len(x_vals) - 1):
+        if (y_vals[i] < p1[1] and y_vals[i + 1] > p2[1]) or (y_vals[i] > p1[1] and y_vals[i + 1] < p2[1]):
+            # Intersección encontrada
+            return x_vals[i], y_vals[i]
+
+    return None
+
 
 def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
-    f = lambdify(x, expr, 'numpy')  # Función numérica para evaluación
-    expr_sym = sympify(expr)  # Expresión simbólica para diferenciación
+    x = symbols('x')
+    f = lambdify(x, sympify(expr), 'numpy')
 
     # Genera puntos densos para evaluar distancia real sobre curva
     x_vals = np.linspace(x_min, x_max, 1000)
@@ -67,34 +65,21 @@ def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
         p2 = puntos[i]
 
         # Aseguramos que la línea de vida esté por encima de la función
-        if p2[1] < f(p2[0]):
-            p2 = (p2[0], f(p2[0]))  # Ajustamos el punto a la función
+        dx, dy = normal_a_funcion(sympify(expr), p2[0], 0.1)  # Desplazamiento ortogonal
+        p2_ajustado = (p2[0] + dx, p2[1] + dy)  # Desplazamos el punto ortogonalmente
 
-        # Ajustamos el punto de anclaje para estar 0.1 metros ortogonalmente hacia fuera
-        dx, dy = normal_a_funcion(expr_sym, p2[0], 0.1)  # Desplazamiento ortogonal usando la expresión simbólica
-        p2_ajustado = (p2[0] + dx, p2[1] + dy)
-        
         d = calcular_distancia(p1, p2_ajustado)
         distancia_acumulada += d
 
         if distancia_acumulada >= distancia_maxima:
-            # Verificamos si la línea entre los puntos actuales corta la cornisa
-            if detectar_interseccion(anclajes[-1], p2_ajustado, f):
-                # Si corta la cornisa, añadimos más puntos
-                x_interp = np.linspace(anclajes[-1][0], p2_ajustado[0], 10)
-                y_interp = f(x_interp)
-                for xi, yi in zip(x_interp[1:], y_interp[1:]):
-                    dx, dy = normal_a_funcion(expr_sym, xi, 0.1)  # Desplazamos ortogonalmente
-                    anclajes.append((xi + dx, yi + dy))
-            else:
-                anclajes.append(p2_ajustado)
-
+            anclajes.append(p2_ajustado)
             distancia_acumulada = 0.0
 
     # Calcular la longitud de la línea de vida
     longitud_linea_vida = calcular_longitud_linea_vida(anclajes)
 
     return puntos, anclajes, longitud_linea_vida
+
 
 def generar_puntos_desde_lista(lista_puntos, distancia_maxima):
     anclajes = [lista_puntos[0]]
@@ -104,7 +89,7 @@ def generar_puntos_desde_lista(lista_puntos, distancia_maxima):
         segmento = p2 - p1
         distancia_segmento = np.linalg.norm(segmento)
         num_interpolaciones = math.floor(distancia_segmento / distancia_maxima)
-        
+
         for j in range(1, num_interpolaciones + 1):
             punto_interpolado = p1 + segmento * (j * distancia_maxima / distancia_segmento)
             anclajes.append(tuple(punto_interpolado))
@@ -114,6 +99,7 @@ def generar_puntos_desde_lista(lista_puntos, distancia_maxima):
     longitud_linea_vida = calcular_longitud_linea_vida(anclajes)
 
     return anclajes, longitud_linea_vida
+
 
 # STREAMLIT
 st.title("Diseñador de Línea de Vida para Trabajo en Altura")
@@ -145,4 +131,27 @@ if modo == "Función":
         st.pyplot(fig)
 
 elif modo == "Lista de puntos":
-    texto_puntos = st.text_area("Introduce puntos como [(x1, y1), (x2, y
+    texto_puntos = st.text_area("Introduce puntos como [(x1, y1), (x2, y2), ...]", "[(0, 0), (5, 2), (9, 2), (12, 6)]")
+
+    try:
+        lista_puntos = eval(texto_puntos)
+        anclajes, longitud_linea_vida = generar_puntos_desde_lista(lista_puntos, distancia_maxima)
+
+        # Mostrar la longitud de la línea de vida
+        st.write(f"La longitud total de la línea de vida es: {longitud_linea_vida:.2f} metros")
+
+        # GRAFICAR
+        x_p, y_p = zip(*lista_puntos)
+        x_a, y_a = zip(*anclajes)
+
+        fig, ax = plt.subplots()
+        ax.plot(x_p, y_p, '--', label="Silueta (puntos)", color='gray')
+        ax.plot(x_a, y_a, 'o-', label="Línea de vida", color='blue')
+        ax.set_title("Línea de vida sobre puntos")
+        ax.set_aspect('equal')
+        ax.grid(True)
+        ax.legend()
+        st.pyplot(fig)
+
+    except Exception as e:
+        st.error(f"Error en el formato de los puntos: {e}")
