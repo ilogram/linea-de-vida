@@ -1,93 +1,93 @@
 import streamlit as st
-import matplotlib.pyplot as plt
 import numpy as np
-import re
+import matplotlib.pyplot as plt
+import math
 from sympy import symbols, lambdify, sympify
-from math import sqrt
 
-st.set_page_config(page_title="Diseñador de Línea de Vida", layout="centered")
+def calcular_distancia(p1, p2):
+    return np.linalg.norm(np.array(p1) - np.array(p2))
 
-st.title("🧗 Diseñador de Línea de Vida en Trabajos en Altura")
+def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
+    x = symbols('x')
+    f = lambdify(x, sympify(expr), 'numpy')
 
-st.markdown("Introduce la **forma de la superficie** por una función matemática o puntos, y obtendrás los anclajes necesarios.")
+    # Genera puntos densos para evaluar distancia real sobre curva
+    x_vals = np.linspace(x_min, x_max, 1000)
+    y_vals = f(x_vals)
+    puntos = list(zip(x_vals, y_vals))
 
-# Entrada del tipo de definición
-input_method = st.radio("¿Cómo quieres definir la superficie?", ["Fórmula matemática", "Lista de puntos"])
+    anclajes = [puntos[0]]
+    distancia_acumulada = 0.0
 
-points = []
+    for i in range(1, len(puntos)):
+        d = calcular_distancia(puntos[i-1], puntos[i])
+        distancia_acumulada += d
+        if distancia_acumulada >= distancia_maxima:
+            anclajes.append(puntos[i])
+            distancia_acumulada = 0.0
 
-if input_method == "Fórmula matemática":
-    expr_str = st.text_input("Introduce la función (por ejemplo: sin(x) o x**2):", value="sin(x)")
-    rango = st.slider("Selecciona el rango de x", -20, 20, (-5, 5))
-    densidad = st.slider("Densidad de puntos para graficar", 10, 500, 100)
+    return puntos, anclajes
 
-    if expr_str:
-        x = symbols('x')
-        try:
-            expr = sympify(expr_str)
-            func = lambdify(x, expr, modules=["numpy"])
-            x_vals = np.linspace(rango[0], rango[1], densidad)
-            y_vals = func(x_vals)
+def generar_puntos_desde_lista(lista_puntos, distancia_maxima):
+    anclajes = [lista_puntos[0]]
 
-            points = list(zip(x_vals, y_vals))
-        except Exception as e:
-            st.error(f"Error al interpretar la función: {e}")
+    for i in range(1, len(lista_puntos)):
+        p1, p2 = np.array(lista_puntos[i - 1]), np.array(lista_puntos[i])
+        segmento = p2 - p1
+        distancia_segmento = np.linalg.norm(segmento)
+        num_interpolaciones = math.floor(distancia_segmento / distancia_maxima)
+        for j in range(1, num_interpolaciones + 1):
+            punto_interpolado = p1 + segmento * (j * distancia_maxima / distancia_segmento)
+            anclajes.append(tuple(punto_interpolado))
+        anclajes.append(tuple(p2))
 
-elif input_method == "Lista de puntos":
-    texto = st.text_area("Introduce los puntos como (x,y), separados por coma:", value="(0,0), (3,0), (3,4), (0,4)")
-    matches = re.findall(r"\(?\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\)?", texto)
+    return anclajes
+
+# STREAMLIT
+st.title("Diseñador de Línea de Vida para Trabajo en Altura")
+modo = st.selectbox("Modo de entrada", ["Función", "Lista de puntos"])
+distancia_maxima = st.number_input("Distancia máxima entre anclajes (m)", min_value=0.1, value=5.0)
+
+if modo == "Función":
+    expr = st.text_input("Introduce la función (en x)", "sin(x) * 3 + 5")
+    x_min = st.number_input("Valor mínimo de x", value=0.0)
+    x_max = st.number_input("Valor máximo de x", value=20.0)
+
+    if x_max > x_min:
+        puntos, anclajes = generar_puntos_funcion(expr, x_min, x_max, distancia_maxima)
+
+        # GRAFICAR
+        x_p, y_p = zip(*puntos)
+        x_a, y_a = zip(*anclajes)
+
+        fig, ax = plt.subplots()
+        ax.plot(x_p, y_p, label="Silueta (función)", color='gray')
+        ax.plot(x_a, y_a, 'o-', label="Línea de vida", color='red')
+        ax.set_title("Línea de vida sobre función")
+        ax.set_aspect('equal')
+        ax.grid(True)
+        ax.legend()
+        st.pyplot(fig)
+
+elif modo == "Lista de puntos":
+    texto_puntos = st.text_area("Introduce puntos como [(x1, y1), (x2, y2), ...]", "[(0, 0), (5, 2), (9, 2), (12, 6)]")
+
     try:
-        points = [(float(x), float(y)) for x, y in matches]
-    except:
-        st.error("Revisa el formato. Debe ser como: (0,0), (3,0), (3,4)")
+        lista_puntos = eval(texto_puntos)
+        anclajes = generar_puntos_desde_lista(lista_puntos, distancia_maxima)
 
-# Parámetros técnicos
-if points:
-    st.subheader("Parámetros técnicos")
-    max_dist = st.number_input("Distancia máxima entre anclajes (en metros):", value=5.0, min_value=1.0)
+        # GRAFICAR
+        x_p, y_p = zip(*lista_puntos)
+        x_a, y_a = zip(*anclajes)
 
-    # Calcular longitud y anclajes
-    total_length = 0
-    for i in range(1, len(points)):
-        dx = points[i][0] - points[i-1][0]
-        dy = points[i][1] - points[i-1][1]
-        total_length += sqrt(dx**2 + dy**2)
+        fig, ax = plt.subplots()
+        ax.plot(x_p, y_p, '--', label="Silueta (puntos)", color='gray')
+        ax.plot(x_a, y_a, 'o-', label="Línea de vida", color='blue')
+        ax.set_title("Línea de vida sobre puntos")
+        ax.set_aspect('equal')
+        ax.grid(True)
+        ax.legend()
+        st.pyplot(fig)
 
-    num_anchors = int(np.ceil(total_length / max_dist)) + 1
-
-    st.markdown(f"**Longitud total:** {total_length:.2f} m")
-    st.markdown(f"**Número recomendado de anclajes:** {num_anchors}")
-
-    # Crear anclajes distribuidos
-    def distribuir_anclajes(puntos, max_distancia):
-        anclajes = [puntos[0]]
-        distancia_actual = 0
-        for i in range(1, len(puntos)):
-            p1 = puntos[i-1]
-            p2 = puntos[i]
-            segmento = sqrt((p2[0]-p1[0])**2 + (p2[1]-p1[1])**2)
-            distancia_actual += segmento
-            if distancia_actual >= max_distancia:
-                anclajes.append(p2)
-                distancia_actual = 0
-        if anclajes[-1] != puntos[-1]:
-            anclajes.append(puntos[-1])
-        return anclajes
-
-    anclajes = distribuir_anclajes(points, max_dist)
-
-    # Graficar
-    st.subheader("Visualización de la línea y anclajes")
-    fig, ax = plt.subplots()
-    xs, ys = zip(*points)
-    ax.plot(xs, ys, label="Recorrido superficie", color="blue")
-
-    ax.scatter(*zip(*anclajes), color="red", zorder=5, label="Anclajes")
-
-    for i, (x, y) in enumerate(anclajes):
-        ax.annotate(f"A{i+1}", (x, y), textcoords="offset points", xytext=(5, 5), fontsize=8)
-
-    ax.set_aspect('equal')
-    ax.grid(True)
-    ax.legend()
-    st.pyplot(fig)
+    except Exception as e:
+        st.error(f"Error en el formato de los puntos: {e}")
