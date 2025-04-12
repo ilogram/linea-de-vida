@@ -84,8 +84,8 @@ def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
             # Aseguramos que no se repita un punto ya añadido
             if not any(np.allclose(nuevo_anclaje, anclaje) for anclaje in anclajes):
                 anclajes.append(nuevo_anclaje)
-    
-    # Ahora procedemos a añadir los anclajes según la distancia máxima
+
+    # Añadir puntos intermedios respetando la distancia máxima
     for i in range(1, len(puntos)):
         p1 = anclajes[-1]  # Usamos el último anclaje añadido
         p2 = puntos[i]
@@ -100,6 +100,9 @@ def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
         if distancia_acumulada >= distancia_maxima:
             anclajes.append(p2_ajustado)
             distancia_acumulada = 0.0
+        else:
+            # Si la distancia no es suficiente, no añadimos un nuevo anclaje
+            continue
 
     # Calcular la longitud de la línea de vida
     longitud_linea_vida = calcular_longitud_linea_vida(anclajes)
