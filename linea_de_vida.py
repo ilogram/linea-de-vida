@@ -79,7 +79,11 @@ def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
             y_crit = f(x_crit)
             # Desplazar ortogonalmente el punto
             dx, dy = normal_a_funcion(sympify(expr), x_crit, 0.1)  # Desplazamiento ortogonal
-            anclajes.append((x_crit + dx, y_crit + dy))
+            nuevo_anclaje = (x_crit + dx, y_crit + dy)
+            
+            # Aseguramos que no se repita un punto ya añadido
+            if not any(np.allclose(nuevo_anclaje, anclaje) for anclaje in anclajes):
+                anclajes.append(nuevo_anclaje)
     
     # Ahora procedemos a añadir los anclajes según la distancia máxima
     for i in range(1, len(puntos)):
