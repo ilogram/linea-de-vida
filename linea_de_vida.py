@@ -1,9 +1,11 @@
-
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 import math
 from sympy import symbols, lambdify, sympify, diff
+
+# Definir x como variable simbólica
+x = symbols('x')
 
 def calcular_distancia(p1, p2):
     return np.linalg.norm(np.array(p1) - np.array(p2))
@@ -15,7 +17,7 @@ def calcular_longitud_linea_vida(anclajes):
     return longitud
 
 def normal_a_funcion(expr, x_val, distancia):
-    # Derivada simbólica de la función
+    # Derivada simbólica de la función con respecto a x
     f_prime = diff(expr, x)
     
     # Evaluamos la derivada en x_val para obtener la pendiente de la tangente
@@ -31,7 +33,6 @@ def normal_a_funcion(expr, x_val, distancia):
     return dx, dy
 
 def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
-    x = symbols('x')
     f = lambdify(x, expr, 'numpy')  # Función numérica para evaluación
     expr_sym = sympify(expr)  # Expresión simbólica para diferenciación
 
