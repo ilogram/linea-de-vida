@@ -14,16 +14,17 @@ def calcular_longitud_linea_vida(anclajes):
         longitud += calcular_distancia(anclajes[i-1], anclajes[i])
     return longitud
 
-def normal_a_funcion(f, x_val, distancia):
-    # Derivada de la función
-    f_prime = diff(f, x)
+def normal_a_funcion(expr, x_val, distancia):
+    # Derivada simbólica de la función
+    f_prime = diff(expr, x)
+    
+    # Evaluamos la derivada en x_val para obtener la pendiente de la tangente
     pendiente_tangente = f_prime.subs(x, x_val)
     
     # La pendiente normal es la opuesta a la tangente (-1/m)
     pendiente_normal = -1 / pendiente_tangente if pendiente_tangente != 0 else float('inf')
     
     # Normalizada a distancia ortogonal (distancia de 0.1m)
-    # Suponiendo que la distancia entre los puntos es pequeña, calculamos el desplazamiento en x y y
     dx = distancia / np.sqrt(1 + pendiente_normal**2)
     dy = pendiente_normal * dx
 
@@ -31,7 +32,8 @@ def normal_a_funcion(f, x_val, distancia):
 
 def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
     x = symbols('x')
-    f = lambdify(x, sympify(expr), 'numpy')
+    f = lambdify(x, expr, 'numpy')  # Función numérica para evaluación
+    expr_sym = sympify(expr)  # Expresión simbólica para diferenciación
 
     # Genera puntos densos para evaluar distancia real sobre curva
     x_vals = np.linspace(x_min, x_max, 1000)
@@ -51,7 +53,7 @@ def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
             p2 = (p2[0], f(p2[0]))  # Ajustamos el punto a la función
 
         # Ajustamos el punto de anclaje para estar 0.1 metros ortogonalmente hacia fuera
-        dx, dy = normal_a_funcion(sympify(expr), p2[0], 0.1)  # Desplazamiento ortogonal
+        dx, dy = normal_a_funcion(expr_sym, p2[0], 0.1)  # Desplazamiento ortogonal usando la expresión simbólica
         p2_ajustado = (p2[0] + dx, p2[1] + dy)
         
         d = calcular_distancia(p1, p2_ajustado)
@@ -64,7 +66,7 @@ def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
                 x_interp = np.linspace(anclajes[-1][0], p2_ajustado[0], 10)
                 y_interp = f(x_interp)
                 for xi, yi in zip(x_interp[1:], y_interp[1:]):
-                    dx, dy = normal_a_funcion(sympify(expr), xi, 0.1)  # Desplazamos ortogonalmente
+                    dx, dy = normal_a_funcion(expr_sym, xi, 0.1)  # Desplazamos ortogonalmente
                     anclajes.append((xi + dx, yi + dy))
             else:
                 anclajes.append(p2_ajustado)
