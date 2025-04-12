@@ -1,8 +1,9 @@
+
 import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 import math
-from sympy import symbols, lambdify, sympify
+from sympy import symbols, lambdify, sympify, diff
 
 def calcular_distancia(p1, p2):
     return np.linalg.norm(np.array(p1) - np.array(p2))
@@ -13,15 +14,20 @@ def calcular_longitud_linea_vida(anclajes):
         longitud += calcular_distancia(anclajes[i-1], anclajes[i])
     return longitud
 
-def detectar_interseccion(p1, p2, f):
-    # Generar una serie de puntos entre p1 y p2
-    x_vals = np.linspace(p1[0], p2[0], 100)
-    y_vals_linea = np.linspace(p1[1], p2[1], 100)
+def normal_a_funcion(f, x_val, distancia):
+    # Derivada de la función
+    f_prime = diff(f, x)
+    pendiente_tangente = f_prime.subs(x, x_val)
+    
+    # La pendiente normal es la opuesta a la tangente (-1/m)
+    pendiente_normal = -1 / pendiente_tangente if pendiente_tangente != 0 else float('inf')
+    
+    # Normalizada a distancia ortogonal (distancia de 0.1m)
+    # Suponiendo que la distancia entre los puntos es pequeña, calculamos el desplazamiento en x y y
+    dx = distancia / np.sqrt(1 + pendiente_normal**2)
+    dy = pendiente_normal * dx
 
-    for x, y in zip(x_vals, y_vals_linea):
-        if y < f(x):
-            return True  # La recta corta la cornisa
-    return False
+    return dx, dy
 
 def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
     x = symbols('x')
@@ -44,19 +50,24 @@ def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
         if p2[1] < f(p2[0]):
             p2 = (p2[0], f(p2[0]))  # Ajustamos el punto a la función
 
-        d = calcular_distancia(p1, p2)
+        # Ajustamos el punto de anclaje para estar 0.1 metros ortogonalmente hacia fuera
+        dx, dy = normal_a_funcion(sympify(expr), p2[0], 0.1)  # Desplazamiento ortogonal
+        p2_ajustado = (p2[0] + dx, p2[1] + dy)
+        
+        d = calcular_distancia(p1, p2_ajustado)
         distancia_acumulada += d
 
         if distancia_acumulada >= distancia_maxima:
             # Verificamos si la línea entre los puntos actuales corta la cornisa
-            if detectar_interseccion(anclajes[-1], p2, f):
+            if detectar_interseccion(anclajes[-1], p2_ajustado, f):
                 # Si corta la cornisa, añadimos más puntos
-                x_interp = np.linspace(anclajes[-1][0], p2[0], 10)
+                x_interp = np.linspace(anclajes[-1][0], p2_ajustado[0], 10)
                 y_interp = f(x_interp)
                 for xi, yi in zip(x_interp[1:], y_interp[1:]):
-                    anclajes.append((xi, yi))
+                    dx, dy = normal_a_funcion(sympify(expr), xi, 0.1)  # Desplazamos ortogonalmente
+                    anclajes.append((xi + dx, yi + dy))
             else:
-                anclajes.append(p2)
+                anclajes.append(p2_ajustado)
 
             distancia_acumulada = 0.0
 
