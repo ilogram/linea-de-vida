@@ -35,6 +35,20 @@ def normal_a_funcion(expr, x_val, distancia):
 
     return dx, dy
 
+def detectar_interseccion(p1, p2, f):
+    """
+    Detecta si el segmento de línea entre p1 y p2 cruza la cornisa definida por la función f.
+    """
+    # Calculamos el valor de la función f para los puntos x de p1 y p2
+    y1 = f(p1[0])  # Y de p1 según la función
+    y2 = f(p2[0])  # Y de p2 según la función
+
+    # Verificamos si ambos puntos están en el mismo lado de la función
+    # Si están en lados opuestos, significa que hay una intersección
+    if (p1[1] > y1 and p2[1] < y2) or (p1[1] < y1 and p2[1] > y2):
+        return True
+    return False
+
 def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
     f = lambdify(x, expr, 'numpy')  # Función numérica para evaluación
     expr_sym = sympify(expr)  # Expresión simbólica para diferenciación
@@ -131,27 +145,4 @@ if modo == "Función":
         st.pyplot(fig)
 
 elif modo == "Lista de puntos":
-    texto_puntos = st.text_area("Introduce puntos como [(x1, y1), (x2, y2), ...]", "[(0, 0), (5, 2), (9, 2), (12, 6)]")
-
-    try:
-        lista_puntos = eval(texto_puntos)
-        anclajes, longitud_linea_vida = generar_puntos_desde_lista(lista_puntos, distancia_maxima)
-
-        # Mostrar la longitud de la línea de vida
-        st.write(f"La longitud total de la línea de vida es: {longitud_linea_vida:.2f} metros")
-
-        # GRAFICAR
-        x_p, y_p = zip(*lista_puntos)
-        x_a, y_a = zip(*anclajes)
-
-        fig, ax = plt.subplots()
-        ax.plot(x_p, y_p, '--', label="Silueta (puntos)", color='gray')
-        ax.plot(x_a, y_a, 'o-', label="Línea de vida", color='blue')
-        ax.set_title("Línea de vida sobre puntos")
-        ax.set_aspect('equal')
-        ax.grid(True)
-        ax.legend()
-        st.pyplot(fig)
-
-    except Exception as e:
-        st.error(f"Error en el formato de los puntos: {e}")
+    texto_puntos = st.text_area("Introduce puntos como [(x1, y1), (x2, y
