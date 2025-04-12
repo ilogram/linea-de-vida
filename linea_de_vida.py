@@ -114,7 +114,7 @@ def generar_puntos_desde_lista(lista_puntos, distancia_maxima):
     anclajes = [lista_puntos[0]]
 
     for i in range(1, len(lista_puntos)):
-        p1, p2 = np.array(lista_puntos[i - 1]), np.array(lista_puntos[i])
+        p1, p2 = np.array(lista_puntos[i - 1]), np.array(lista_puntos[i])  # Corregido
         segmento = p2 - p1
         distancia_segmento = np.linalg.norm(segmento)
         num_interpolaciones = math.floor(distancia_segmento / distancia_maxima)
