@@ -1,177 +1,93 @@
-import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
+import streamlit as st
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import reportlab
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-import os
+import numpy as np
+import re
+from sympy import symbols, lambdify, sympify
+from math import sqrt
 
-# Clase principal
-class LineaDeVidaApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Diseñador de Línea de Vida Avanzado")
-        self.root.geometry("1000x600")
+st.set_page_config(page_title="Diseñador de Línea de Vida", layout="centered")
 
-        self.puntos = []  # Lista de puntos de la silueta
+st.title("🧗 Diseñador de Línea de Vida en Trabajos en Altura")
 
-        self.crear_widgets()
+st.markdown("Introduce la **forma de la superficie** por una función matemática o puntos, y obtendrás los anclajes necesarios.")
 
-    def crear_widgets(self):
-        self.frame_izq = ttk.Frame(self.root, padding=10)
-        self.frame_izq.pack(side=tk.LEFT, fill=tk.Y)
+# Entrada del tipo de definición
+input_method = st.radio("¿Cómo quieres definir la superficie?", ["Fórmula matemática", "Lista de puntos"])
 
-        ttk.Label(self.frame_izq, text="Altura libre (m):").pack()
-        self.altura_entry = ttk.Entry(self.frame_izq)
-        self.altura_entry.insert(0, "6")
-        self.altura_entry.pack()
+points = []
 
-        ttk.Label(self.frame_izq, text="Usuarios simultáneos:").pack()
-        self.combo_usuarios = ttk.Combobox(self.frame_izq, values=[1, 2, 3], state="readonly")
-        self.combo_usuarios.current(0)
-        self.combo_usuarios.pack()
+if input_method == "Fórmula matemática":
+    expr_str = st.text_input("Introduce la función (por ejemplo: sin(x) o x**2):", value="sin(x)")
+    rango = st.slider("Selecciona el rango de x", -20, 20, (-5, 5))
+    densidad = st.slider("Densidad de puntos para graficar", 10, 500, 100)
 
-        ttk.Button(self.frame_izq, text="Calcular y Dibujar", command=self.calcular).pack(pady=10)
-        ttk.Button(self.frame_izq, text="Exportar PDF", command=self.exportar_pdf).pack()
-        ttk.Button(self.frame_izq, text="Borrar todo", command=self.borrar_todo).pack(pady=10)
-
-        # Canvas de dibujo
-        self.fig, self.ax = plt.subplots()
-        self.ax.set_title("Dibuja la silueta (clic para añadir puntos)")
-        self.ax.set_xlim(0, 50)
-        self.ax.set_ylim(0, 30)
-        self.ax.grid(True)
-
-        self.canvas = FigureCanvasTkAgg(self.fig, master=self.root)
-        self.canvas.get_tk_widget().pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-        self.canvas.mpl_connect("button_press_event", self.on_click)
-
-    def on_click(self, event):
-        if event.inaxes:
-            self.puntos.append((event.xdata, event.ydata))
-            self.ax.plot(event.xdata, event.ydata, 'bo')
-            self.redibujar()
-
-    def redibujar(self):
-        self.ax.clear()
-        self.ax.set_title("Silueta y línea de vida")
-        self.ax.set_xlim(0, 50)
-        self.ax.set_ylim(0, 30)
-        self.ax.grid(True)
-        if len(self.puntos) > 1:
-            xs, ys = zip(*self.puntos)
-            self.ax.plot(xs, ys, 'b-', label="Silueta")
-        for x, y in self.puntos:
-            self.ax.plot(x, y, 'bo')
-        self.canvas.draw()
-
-    def calcular(self):
+    if expr_str:
+        x = symbols('x')
         try:
-            altura_libre = float(self.altura_entry.get())
-            usuarios = int(self.combo_usuarios.get())
-            if len(self.puntos) < 2:
-                messagebox.showwarning("Atención", "Dibuja al menos dos puntos.")
-                return
+            expr = sympify(expr_str)
+            func = lambdify(x, expr, modules=["numpy"])
+            x_vals = np.linspace(rango[0], rango[1], densidad)
+            y_vals = func(x_vals)
 
-            # Calcular longitud total de la línea de vida
-            longitud_total = sum(
-                ((self.puntos[i+1][0]-self.puntos[i][0])**2 + (self.puntos[i+1][1]-self.puntos[i][1])**2)**0.5
-                for i in range(len(self.puntos)-1))
-
-            distancia_anclajes = 10
-            num_anclajes = max(2, round(longitud_total / distancia_anclajes) + 1)
-            tipo_linea = "Cable de acero" if longitud_total > 10 else "Cuerda flexible"
-            carga = usuarios * 6
-            altura_ok = altura_libre >= 6
-
-            # Dibujar anclajes en la línea
-            self.ax.clear()
-            self.ax.set_xlim(0, 50)
-            self.ax.set_ylim(0, 30)
-            self.ax.grid(True)
-            xs, ys = zip(*self.puntos)
-            self.ax.plot(xs, ys, 'b-', label="Silueta")
-            self.ax.plot(xs, ys, 'g--', label="Línea de vida")
-
-            # Repartir anclajes equidistantes
-            anclajes = [self.puntos[0]]
-            acumulado = 0
-            i = 0
-            while len(anclajes) < num_anclajes:
-                seg_len = ((self.puntos[i+1][0] - self.puntos[i][0])**2 + (self.puntos[i+1][1] - self.puntos[i][1])**2)**0.5
-                acumulado += seg_len
-                if acumulado >= distancia_anclajes:
-                    anclajes.append(self.puntos[i+1])
-                    acumulado = 0
-                i += 1
-                if i >= len(self.puntos)-1:
-                    break
-
-            for idx, (x, y) in enumerate(anclajes):
-                self.ax.plot(x, y, 'ro')
-                self.ax.text(x, y + 0.5, f"A{idx+1}", color='red')
-
-            self.ax.legend()
-            self.canvas.draw()
-
-            # Guardar resultados para PDF
-            self.resultado_pdf = {
-                "longitud": round(longitud_total, 2),
-                "anclajes": len(anclajes),
-                "tipo": tipo_linea,
-                "carga": carga,
-                "altura_ok": altura_ok,
-                "usuarios": usuarios,
-                "altura": altura_libre,
-                "anclajes_coords": anclajes
-            }
-
+            points = list(zip(x_vals, y_vals))
         except Exception as e:
-            messagebox.showerror("Error", str(e))
+            st.error(f"Error al interpretar la función: {e}")
 
-    def exportar_pdf(self):
-        if not hasattr(self, 'resultado_pdf'):
-            messagebox.showwarning("Primero calcula", "Realiza un cálculo antes de exportar.")
-            return
-        filepath = filedialog.asksaveasfilename(defaultextension=".pdf", filetypes=[("PDF files", "*.pdf")])
-        if not filepath:
-            return
+elif input_method == "Lista de puntos":
+    texto = st.text_area("Introduce los puntos como (x,y), separados por coma:", value="(0,0), (3,0), (3,4), (0,4)")
+    matches = re.findall(r"\(?\s*(-?\d+\.?\d*)\s*,\s*(-?\d+\.?\d*)\s*\)?", texto)
+    try:
+        points = [(float(x), float(y)) for x, y in matches]
+    except:
+        st.error("Revisa el formato. Debe ser como: (0,0), (3,0), (3,4)")
 
-        c = canvas.Canvas(filepath, pagesize=A4)
-        c.setFont("Helvetica", 12)
-        c.drawString(50, 800, "Informe de Línea de Vida")
-        y = 770
-        for key, val in self.resultado_pdf.items():
-            if key != 'anclajes_coords':
-                c.drawString(50, y, f"{key.capitalize()}: {val}")
-                y -= 20
+# Parámetros técnicos
+if points:
+    st.subheader("Parámetros técnicos")
+    max_dist = st.number_input("Distancia máxima entre anclajes (en metros):", value=5.0, min_value=1.0)
 
-        c.drawString(50, y, "Coordenadas de Anclajes:")
-        y -= 20
-        for i, (x, yy) in enumerate(self.resultado_pdf['anclajes_coords']):
-            c.drawString(60, y, f"A{i+1}: ({round(x,2)}, {round(yy,2)})")
-            y -= 15
+    # Calcular longitud y anclajes
+    total_length = 0
+    for i in range(1, len(points)):
+        dx = points[i][0] - points[i-1][0]
+        dy = points[i][1] - points[i-1][1]
+        total_length += sqrt(dx**2 + dy**2)
 
-        # Exportar dibujo
-        imagen_temp = "temp_figura.png"
-        self.fig.savefig(imagen_temp)
-        c.drawImage(imagen_temp, 50, 100, width=500, height=300)
-        os.remove(imagen_temp)
+    num_anchors = int(np.ceil(total_length / max_dist)) + 1
 
-        c.save()
-        messagebox.showinfo("Éxito", f"PDF exportado a: {filepath}")
+    st.markdown(f"**Longitud total:** {total_length:.2f} m")
+    st.markdown(f"**Número recomendado de anclajes:** {num_anchors}")
 
-    def borrar_todo(self):
-        self.puntos.clear()
-        self.ax.clear()
-        self.ax.set_title("Dibuja la silueta (clic para añadir puntos)")
-        self.ax.set_xlim(0, 50)
-        self.ax.set_ylim(0, 30)
-        self.ax.grid(True)
-        self.canvas.draw()
+    # Crear anclajes distribuidos
+    def distribuir_anclajes(puntos, max_distancia):
+        anclajes = [puntos[0]]
+        distancia_actual = 0
+        for i in range(1, len(puntos)):
+            p1 = puntos[i-1]
+            p2 = puntos[i]
+            segmento = sqrt((p2[0]-p1[0])**2 + (p2[1]-p1[1])**2)
+            distancia_actual += segmento
+            if distancia_actual >= max_distancia:
+                anclajes.append(p2)
+                distancia_actual = 0
+        if anclajes[-1] != puntos[-1]:
+            anclajes.append(puntos[-1])
+        return anclajes
 
-if __name__ == '__main__':
-    root = tk.Tk()
-    app = LineaDeVidaApp(root)
-    root.mainloop()
+    anclajes = distribuir_anclajes(points, max_dist)
+
+    # Graficar
+    st.subheader("Visualización de la línea y anclajes")
+    fig, ax = plt.subplots()
+    xs, ys = zip(*points)
+    ax.plot(xs, ys, label="Recorrido superficie", color="blue")
+
+    ax.scatter(*zip(*anclajes), color="red", zorder=5, label="Anclajes")
+
+    for i, (x, y) in enumerate(anclajes):
+        ax.annotate(f"A{i+1}", (x, y), textcoords="offset points", xytext=(5, 5), fontsize=8)
+
+    ax.set_aspect('equal')
+    ax.grid(True)
+    ax.legend()
+    st.pyplot(fig)
