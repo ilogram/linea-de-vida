@@ -16,70 +16,72 @@ def calcular_longitud_linea_vida(anclajes):
     return longitud
 
 
-def normal_a_funcion(f, x_val, distancia_ortogonal):
+def normal_a_funcion(f_expr, x_val, distancia_ortogonal):
     x = symbols('x')
-    f_prime = diff(f, x)
-    f_eval = lambdify(x, f, 'numpy')
-
+    f_prime = diff(f_expr, x)
     m_tangente = float(f_prime.subs(x, x_val))
-    m_normal = -1 / m_tangente
+    m_normal = -1 / m_tangente if m_tangente != 0 else -1e6
 
     dx = distancia_ortogonal / np.sqrt(1 + m_normal ** 2)
     dy = m_normal * dx
 
-    # Punto original sobre la curva
-    y_original = f_eval(x_val)
+    x_pos = x_val + dx
+    y_pos = float(sympify(f_expr).subs(x, x_val)) + dy
 
-    # Dos posibles puntos desplazados
-    p1 = (x_val + dx, y_original + dy)
-    p2 = (x_val - dx, y_original - dy)
+    x_neg = x_val - dx
+    y_neg = float(sympify(f_expr).subs(x, x_val)) - dy
 
-    # Elegir el que esté más arriba (mayor valor de y)
-    if p1[1] > p2[1]:
-        return dx, dy
-    else:
-        return -dx, -dy
+    return (x_pos, y_pos) if y_pos > y_neg else (x_neg, y_neg)
 
 
 def detectar_interseccion(p1, p2, f):
-    x_vals = np.linspace(p1[0], p2[0], 1000)
-    y_vals = f(x_vals)
+    x_vals = np.linspace(min(p1[0], p2[0]), max(p1[0], p2[0]), 500)
+    y_vals_func = f(x_vals)
 
-    for i in range(len(x_vals) - 1):
-        if (y_vals[i] < p1[1] and y_vals[i + 1] > p2[1]) or (y_vals[i] > p1[1] and y_vals[i + 1] < p2[1]):
-            return x_vals[i], y_vals[i]
-
-    return None
+    for x_val, y_func in zip(x_vals, y_vals_func):
+        y_seg = p1[1] + (p2[1] - p1[1]) * (x_val - p1[0]) / (p2[0] - p1[0] + 1e-9)
+        if y_func > y_seg:
+            return True  # Hay intersección
+    return False
 
 
 def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
     x = symbols('x')
-    f_sym = sympify(expr)
-    f = lambdify(x, f_sym, 'numpy')
+    f_expr = sympify(expr)
+    f = lambdify(x, f_expr, 'numpy')
+
+    anclajes = []
+    x_actual = x_min
+    p_actual = normal_a_funcion(f_expr, x_actual, 0.1)
+    anclajes.append(p_actual)
+
+    while x_actual < x_max:
+        x_candidato = x_actual + distancia_maxima
+        if x_candidato > x_max:
+            x_candidato = x_max
+
+        p_candidato = normal_a_funcion(f_expr, x_candidato, 0.1)
+
+        if detectar_interseccion(p_actual, p_candidato, f):
+            # buscar un punto más cercano
+            for delta in np.linspace(distancia_maxima, 0.1, 50):
+                x_candidato = x_actual + delta
+                p_candidato = normal_a_funcion(f_expr, x_candidato, 0.1)
+                if not detectar_interseccion(p_actual, p_candidato, f):
+                    anclajes.append(p_candidato)
+                    x_actual = x_candidato
+                    p_actual = p_candidato
+                    break
+            else:
+                x_actual += 0.1  # Forzar avance mínimo
+        else:
+            anclajes.append(p_candidato)
+            x_actual = x_candidato
+            p_actual = p_candidato
 
     x_vals = np.linspace(x_min, x_max, 1000)
     y_vals = f(x_vals)
     puntos = list(zip(x_vals, y_vals))
-
-    anclajes = []
-    distancia_acumulada = 0.0
-    anterior = puntos[0]
-    dx, dy = normal_a_funcion(f_sym, anterior[0], 0.1)
-    anterior_ajustado = (anterior[0] + dx, anterior[1] + dy)
-    anclajes.append(anterior_ajustado)
-
-    for i in range(1, len(puntos)):
-        p_actual = puntos[i]
-        dx, dy = normal_a_funcion(f_sym, p_actual[0], 0.1)
-        p_actual_ajustado = (p_actual[0] + dx, p_actual[1] + dy)
-
-        d = calcular_distancia(anclajes[-1], p_actual_ajustado)
-        distancia_acumulada += d
-
-        if distancia_acumulada >= distancia_maxima:
-            anclajes.append(p_actual_ajustado)
-            distancia_acumulada = 0.0
-
     longitud_linea_vida = calcular_longitud_linea_vida(anclajes)
     return puntos, anclajes, longitud_linea_vida
 
@@ -100,6 +102,7 @@ def generar_puntos_desde_lista(lista_puntos, distancia_maxima):
 
     longitud_linea_vida = calcular_longitud_linea_vida(anclajes)
     return anclajes, longitud_linea_vida
+
 
 # STREAMLIT
 st.title("Diseñador de Línea de Vida para Trabajo en Altura")
