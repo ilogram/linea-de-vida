@@ -2,7 +2,7 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 import math
-from sympy import symbols, lambdify, sympify, diff
+from sympy import symbols, lambdify, sympify
 
 
 def calcular_distancia(p1, p2):
@@ -16,89 +16,48 @@ def calcular_longitud_linea_vida(anclajes):
     return longitud
 
 
-def normal_a_funcion(f_expr, x_val, distancia_max_ortogonal):
-    x = symbols('x')
-    f_prime = diff(f_expr, x)
-    try:
-        m_tangente = float(f_prime.subs(x, x_val))
-        m_normal = -1 / m_tangente if abs(m_tangente) > 1e-3 else 0
-    except:
-        m_normal = 0
-
-    if m_normal == 0:
-        return (x_val, float(sympify(f_expr).subs(x, x_val)) + distancia_max_ortogonal)
-
-    dx = distancia_max_ortogonal / np.sqrt(1 + m_normal ** 2)
-    dy = m_normal * dx
-
-    x_pos = x_val + dx
-    y_pos = float(sympify(f_expr).subs(x, x_val)) + dy
-
-    x_neg = x_val - dx
-    y_neg = float(sympify(f_expr).subs(x, x_val)) - dy
-
-    # Elegir el que esté por encima
-    return (x_pos, y_pos) if y_pos > y_neg else (x_neg, y_neg)
-
-
-def detectar_interseccion(p1, p2, f):
-    x_vals = np.linspace(min(p1[0], p2[0]), max(p1[0], p2[0]), 500)
-    y_vals_func = f(x_vals)
-
-    for x_val, y_func in zip(x_vals, y_vals_func):
-        y_seg = p1[1] + (p2[1] - p1[1]) * (x_val - p1[0]) / (p2[0] - p1[0] + 1e-9)
-        if y_func > y_seg:
-            return True
-    return False
+def segmento_dentro_rango(p1, p2, f_lambdified, paso=0.1, max_sep=0.5):
+    num_pasos = max(2, int(calcular_distancia(p1, p2) / paso))
+    for i in range(1, num_pasos):
+        t = i / num_pasos
+        x = p1[0] + t * (p2[0] - p1[0])
+        y = p1[1] + t * (p2[1] - p1[1])
+        y_func = f_lambdified(x)
+        if y - y_func < 0 or y - y_func > max_sep:
+            return False
+    return True
 
 
 def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
     x = symbols('x')
     f_expr = sympify(expr)
-    f = lambdify(x, f_expr, 'numpy')
-    
+    f_lambdified = lambdify(x, f_expr, 'numpy')
+
+    puntos = []
     anclajes = []
     x_actual = x_min
-    p_actual = normal_a_funcion(f_expr, x_actual, 0.1)
-    anclajes.append(p_actual)
 
-    while x_actual < x_max:
-        x_candidato = x_actual + distancia_maxima
-        if x_candidato > x_max:
-            x_candidato = x_max
+    while x_actual <= x_max:
+        y_actual = float(f_lambdified(x_actual)) + 0.1  # Siempre 0.1 m por encima
+        puntos.append((x_actual, float(f_lambdified(x_actual))))
+        anclajes.append((x_actual, y_actual))
+        x_actual += 0.1  # Siempre separados 0.1 m
 
-        # Buscar el mejor punto desplazado con restricción de máxima separación vertical
-        for d_ort in np.linspace(0.1, 0.5, 10):
-            p_candidato = normal_a_funcion(f_expr, x_candidato, d_ort)
-            distancia_vertical = abs(p_candidato[1] - float(sympify(f_expr).subs(x, x_candidato)))
-            if distancia_vertical <= 0.5 and not detectar_interseccion(p_actual, p_candidato, f):
-                anclajes.append(p_candidato)
-                x_actual = x_candidato
-                p_actual = p_candidato
-                break
-        else:
-            # Si no se encuentra punto seguro, retroceder
-            for delta in np.linspace(distancia_maxima, 0.1, 50):
-                x_candidato = x_actual + delta
-                for d_ort in np.linspace(0.1, 0.5, 10):
-                    p_candidato = normal_a_funcion(f_expr, x_candidato, d_ort)
-                    distancia_vertical = abs(p_candidato[1] - float(sympify(f_expr).subs(x, x_candidato)))
-                    if distancia_vertical <= 0.5 and not detectar_interseccion(p_actual, p_candidato, f):
-                        anclajes.append(p_candidato)
-                        x_actual = x_candidato
-                        p_actual = p_candidato
-                        break
-                else:
-                    continue
-                break
+    # Filtrar anclajes para tener los mínimos necesarios
+    anclajes_filtrados = [anclajes[0]]
+    i = 0
+    while i < len(anclajes) - 1:
+        j = i + 1
+        while j < len(anclajes) and calcular_distancia(anclajes[i], anclajes[j]) <= distancia_maxima:
+            if segmento_dentro_rango(anclajes[i], anclajes[j], f_lambdified, paso=0.1, max_sep=0.5):
+                j += 1
             else:
-                x_actual += 0.1
+                break
+        anclajes_filtrados.append(anclajes[j - 1])
+        i = j - 1
 
-    x_vals = np.linspace(x_min, x_max, 1000)
-    y_vals = f(x_vals)
-    puntos = list(zip(x_vals, y_vals))
-    longitud_linea_vida = calcular_longitud_linea_vida(anclajes)
-    return puntos, anclajes, longitud_linea_vida
+    longitud_linea_vida = calcular_longitud_linea_vida(anclajes_filtrados)
+    return puntos, anclajes_filtrados, longitud_linea_vida
 
 
 def generar_puntos_desde_lista(lista_puntos, distancia_maxima):
@@ -117,7 +76,6 @@ def generar_puntos_desde_lista(lista_puntos, distancia_maxima):
 
     longitud_linea_vida = calcular_longitud_linea_vida(anclajes)
     return anclajes, longitud_linea_vida
-
 
 # STREAMLIT
 st.title("Diseñador de Línea de Vida para Trabajo en Altura")
