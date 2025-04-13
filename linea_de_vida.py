@@ -11,9 +11,12 @@ def calcular_distancia(p1, p2):
 
 def calcular_longitud_linea_vida(anclajes):
     longitud = 0.0
+    distancias = [0.0]
     for i in range(1, len(anclajes)):
-        longitud += calcular_distancia(anclajes[i - 1], anclajes[i])
-    return longitud
+        d = calcular_distancia(anclajes[i - 1], anclajes[i])
+        longitud += d
+        distancias.append(longitud)
+    return longitud, distancias
 
 
 def segmento_dentro_rango(p1, p2, f_lambdified, paso=0.1, max_sep=0.5):
@@ -55,8 +58,8 @@ def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima, max_sep):
         anclajes_filtrados.append(anclajes[j - 1])
         i = j - 1
 
-    longitud_linea_vida = calcular_longitud_linea_vida(anclajes_filtrados)
-    return puntos, anclajes_filtrados, longitud_linea_vida
+    longitud_linea_vida, posiciones_lineales = calcular_longitud_linea_vida(anclajes_filtrados)
+    return puntos, anclajes_filtrados, longitud_linea_vida, posiciones_lineales
 
 
 def generar_puntos_desde_lista(lista_puntos, distancia_maxima):
@@ -73,8 +76,8 @@ def generar_puntos_desde_lista(lista_puntos, distancia_maxima):
             anclajes.append(tuple(punto_interpolado))
         anclajes.append(tuple(p2))
 
-    longitud_linea_vida = calcular_longitud_linea_vida(anclajes)
-    return anclajes, longitud_linea_vida
+    longitud_linea_vida, posiciones_lineales = calcular_longitud_linea_vida(anclajes)
+    return anclajes, longitud_linea_vida, posiciones_lineales
 
 
 # STREAMLIT
@@ -89,9 +92,13 @@ if modo == "Función":
     x_max = st.number_input("Valor máximo de x", value=20.0)
 
     if x_max > x_min:
-        puntos, anclajes, longitud_linea_vida = generar_puntos_funcion(expr, x_min, x_max, distancia_maxima, max_sep)
+        puntos, anclajes, longitud_linea_vida, posiciones_lineales = generar_puntos_funcion(expr, x_min, x_max, distancia_maxima, max_sep)
 
         st.write(f"La longitud total de la línea de vida es: {longitud_linea_vida:.2f} metros")
+
+        st.subheader("Coordenadas y ubicación a lo largo de la línea de vida")
+        for idx, (anclaje, dist) in enumerate(zip(anclajes, posiciones_lineales)):
+            st.write(f"Anclaje {idx + 1}: x = {anclaje[0]:.2f}, y = {anclaje[1]:.2f}, distancia = {dist:.2f} m")
 
         x_p, y_p = zip(*puntos)
         x_a, y_a = zip(*anclajes)
@@ -110,9 +117,13 @@ elif modo == "Lista de puntos":
 
     try:
         lista_puntos = eval(texto_puntos)
-        anclajes, longitud_linea_vida = generar_puntos_desde_lista(lista_puntos, distancia_maxima)
+        anclajes, longitud_linea_vida, posiciones_lineales = generar_puntos_desde_lista(lista_puntos, distancia_maxima)
 
         st.write(f"La longitud total de la línea de vida es: {longitud_linea_vida:.2f} metros")
+
+        st.subheader("Coordenadas y ubicación a lo largo de la línea de vida")
+        for idx, (anclaje, dist) in enumerate(zip(anclajes, posiciones_lineales)):
+            st.write(f"Anclaje {idx + 1}: x = {anclaje[0]:.2f}, y = {anclaje[1]:.2f}, distancia = {dist:.2f} m")
 
         x_p, y_p = zip(*lista_puntos)
         x_a, y_a = zip(*anclajes)
