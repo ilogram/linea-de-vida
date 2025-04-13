@@ -28,7 +28,7 @@ def segmento_dentro_rango(p1, p2, f_lambdified, paso=0.1, max_sep=0.5):
     return True
 
 
-def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
+def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima, max_sep):
     x = symbols('x')
     f_expr = sympify(expr)
     f_lambdified = lambdify(x, f_expr, 'numpy')
@@ -38,18 +38,17 @@ def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
     x_actual = x_min
 
     while x_actual <= x_max:
-        y_actual = float(f_lambdified(x_actual)) + 0.1  # Siempre 0.1 m por encima
+        y_actual = float(f_lambdified(x_actual)) + 0.1
         puntos.append((x_actual, float(f_lambdified(x_actual))))
         anclajes.append((x_actual, y_actual))
-        x_actual += 0.1  # Siempre separados 0.1 m
+        x_actual += 0.1
 
-    # Filtrar anclajes para tener los mínimos necesarios
     anclajes_filtrados = [anclajes[0]]
     i = 0
     while i < len(anclajes) - 1:
         j = i + 1
         while j < len(anclajes) and calcular_distancia(anclajes[i], anclajes[j]) <= distancia_maxima:
-            if segmento_dentro_rango(anclajes[i], anclajes[j], f_lambdified, paso=0.1, max_sep=0.5):
+            if segmento_dentro_rango(anclajes[i], anclajes[j], f_lambdified, paso=0.1, max_sep=max_sep):
                 j += 1
             else:
                 break
@@ -77,10 +76,12 @@ def generar_puntos_desde_lista(lista_puntos, distancia_maxima):
     longitud_linea_vida = calcular_longitud_linea_vida(anclajes)
     return anclajes, longitud_linea_vida
 
+
 # STREAMLIT
 st.title("Diseñador de Línea de Vida para Trabajo en Altura")
 modo = st.selectbox("Modo de entrada", ["Función", "Lista de puntos"])
 distancia_maxima = st.number_input("Distancia máxima entre anclajes (m)", min_value=0.1, value=5.0)
+max_sep = st.number_input("Separación máxima permitida respecto a la cornisa (m)", min_value=0.1, value=0.5)
 
 if modo == "Función":
     expr = st.text_input("Introduce la función (en x)", "sin(x) * 3 + 5")
@@ -88,7 +89,7 @@ if modo == "Función":
     x_max = st.number_input("Valor máximo de x", value=20.0)
 
     if x_max > x_min:
-        puntos, anclajes, longitud_linea_vida = generar_puntos_funcion(expr, x_min, x_max, distancia_maxima)
+        puntos, anclajes, longitud_linea_vida = generar_puntos_funcion(expr, x_min, x_max, distancia_maxima, max_sep)
 
         st.write(f"La longitud total de la línea de vida es: {longitud_linea_vida:.2f} metros")
 
