@@ -16,13 +16,19 @@ def calcular_longitud_linea_vida(anclajes):
     return longitud
 
 
-def normal_a_funcion(f_expr, x_val, distancia_ortogonal):
+def normal_a_funcion(f_expr, x_val, distancia_max_ortogonal):
     x = symbols('x')
     f_prime = diff(f_expr, x)
-    m_tangente = float(f_prime.subs(x, x_val))
-    m_normal = -1 / m_tangente if m_tangente != 0 else -1e6
+    try:
+        m_tangente = float(f_prime.subs(x, x_val))
+        m_normal = -1 / m_tangente if abs(m_tangente) > 1e-3 else 0
+    except:
+        m_normal = 0
 
-    dx = distancia_ortogonal / np.sqrt(1 + m_normal ** 2)
+    if m_normal == 0:
+        return (x_val, float(sympify(f_expr).subs(x, x_val)) + distancia_max_ortogonal)
+
+    dx = distancia_max_ortogonal / np.sqrt(1 + m_normal ** 2)
     dy = m_normal * dx
 
     x_pos = x_val + dx
@@ -31,6 +37,7 @@ def normal_a_funcion(f_expr, x_val, distancia_ortogonal):
     x_neg = x_val - dx
     y_neg = float(sympify(f_expr).subs(x, x_val)) - dy
 
+    # Elegir el que esté por encima
     return (x_pos, y_pos) if y_pos > y_neg else (x_neg, y_neg)
 
 
@@ -41,7 +48,7 @@ def detectar_interseccion(p1, p2, f):
     for x_val, y_func in zip(x_vals, y_vals_func):
         y_seg = p1[1] + (p2[1] - p1[1]) * (x_val - p1[0]) / (p2[0] - p1[0] + 1e-9)
         if y_func > y_seg:
-            return True  # Hay intersección
+            return True
     return False
 
 
@@ -49,7 +56,7 @@ def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
     x = symbols('x')
     f_expr = sympify(expr)
     f = lambdify(x, f_expr, 'numpy')
-
+    
     anclajes = []
     x_actual = x_min
     p_actual = normal_a_funcion(f_expr, x_actual, 0.1)
@@ -60,24 +67,32 @@ def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima):
         if x_candidato > x_max:
             x_candidato = x_max
 
-        p_candidato = normal_a_funcion(f_expr, x_candidato, 0.1)
-
-        if detectar_interseccion(p_actual, p_candidato, f):
-            # buscar un punto más cercano
+        # Buscar el mejor punto desplazado con restricción de máxima separación vertical
+        for d_ort in np.linspace(0.1, 0.5, 10):
+            p_candidato = normal_a_funcion(f_expr, x_candidato, d_ort)
+            distancia_vertical = abs(p_candidato[1] - float(sympify(f_expr).subs(x, x_candidato)))
+            if distancia_vertical <= 0.5 and not detectar_interseccion(p_actual, p_candidato, f):
+                anclajes.append(p_candidato)
+                x_actual = x_candidato
+                p_actual = p_candidato
+                break
+        else:
+            # Si no se encuentra punto seguro, retroceder
             for delta in np.linspace(distancia_maxima, 0.1, 50):
                 x_candidato = x_actual + delta
-                p_candidato = normal_a_funcion(f_expr, x_candidato, 0.1)
-                if not detectar_interseccion(p_actual, p_candidato, f):
-                    anclajes.append(p_candidato)
-                    x_actual = x_candidato
-                    p_actual = p_candidato
-                    break
+                for d_ort in np.linspace(0.1, 0.5, 10):
+                    p_candidato = normal_a_funcion(f_expr, x_candidato, d_ort)
+                    distancia_vertical = abs(p_candidato[1] - float(sympify(f_expr).subs(x, x_candidato)))
+                    if distancia_vertical <= 0.5 and not detectar_interseccion(p_actual, p_candidato, f):
+                        anclajes.append(p_candidato)
+                        x_actual = x_candidato
+                        p_actual = p_candidato
+                        break
+                else:
+                    continue
+                break
             else:
-                x_actual += 0.1  # Forzar avance mínimo
-        else:
-            anclajes.append(p_candidato)
-            x_actual = x_candidato
-            p_actual = p_candidato
+                x_actual += 0.1
 
     x_vals = np.linspace(x_min, x_max, 1000)
     y_vals = f(x_vals)
