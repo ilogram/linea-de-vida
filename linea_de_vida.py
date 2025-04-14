@@ -5,6 +5,7 @@ import math
 import io
 import pandas as pd
 from sympy import symbols, lambdify, sympify
+from fpdf import FPDF
 
 
 def calcular_distancia(p1, p2):
@@ -82,6 +83,29 @@ def generar_puntos_desde_lista(lista_puntos, distancia_maxima):
     return anclajes, longitud_linea_vida, posiciones_lineales
 
 
+def generar_pdf(df, img_data):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+
+    pdf.cell(200, 10, txt="Tabla de Anclajes", ln=True, align="C")
+    pdf.ln(10)
+
+    for index, row in df.iterrows():
+        pdf.cell(200, 10, txt=f"{row['Anclaje']}: X = {row['X']:.2f}, Y = {row['Y']:.2f}, Distancia = {row['Distancia (m)']:.2f} m", ln=True)
+
+    pdf.add_page()
+    pdf.cell(200, 10, txt="Gráfica de la Línea de Vida", ln=True, align="C")
+
+    img_path = "temp_img.png"
+    with open(img_path, "wb") as f:
+        f.write(img_data)
+
+    pdf.image(img_path, x=10, y=30, w=180)
+    output = io.BytesIO()
+    pdf.output(output)
+    return output.getvalue()
+
 # STREAMLIT
 st.title("Diseñador de Línea de Vida para Trabajo en Altura")
 modo = st.selectbox("Modo de entrada", ["Función", "Lista de puntos"])
@@ -124,7 +148,11 @@ if modo == "Función":
 
         buf = io.BytesIO()
         fig.savefig(buf, format="png")
-        st.download_button("Descargar gráfica (PNG)", buf.getvalue(), "grafica_linea_vida.png", "image/png")
+        img_data = buf.getvalue()
+
+        st.download_button("Descargar gráfica (PNG)", img_data, "grafica_linea_vida.png", "image/png")
+        pdf_bytes = generar_pdf(df, img_data)
+        st.download_button("Descargar reporte (PDF)", pdf_bytes, "reporte_linea_vida.pdf", "application/pdf")
 
 elif modo == "Lista de puntos":
     texto_puntos = st.text_area("Introduce puntos como [(x1, y1), (x2, y2), ...]", "[(0, 0), (5, 2), (9, 2), (12, 6)]")
@@ -161,7 +189,11 @@ elif modo == "Lista de puntos":
 
         buf = io.BytesIO()
         fig.savefig(buf, format="png")
-        st.download_button("Descargar gráfica (PNG)", buf.getvalue(), "grafica_linea_vida.png", "image/png")
+        img_data = buf.getvalue()
+
+        st.download_button("Descargar gráfica (PNG)", img_data, "grafica_linea_vida.png", "image/png")
+        pdf_bytes = generar_pdf(df, img_data)
+        st.download_button("Descargar reporte (PDF)", pdf_bytes, "reporte_linea_vida.pdf", "application/pdf")
 
     except Exception as e:
         st.error(f"Error en el formato de los puntos: {e}")
