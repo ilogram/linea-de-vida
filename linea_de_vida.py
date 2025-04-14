@@ -2,6 +2,8 @@ import streamlit as st
 import numpy as np
 import matplotlib.pyplot as plt
 import math
+import io
+import pandas as pd
 from sympy import symbols, lambdify, sympify
 
 
@@ -97,8 +99,16 @@ if modo == "Función":
         st.write(f"La longitud total de la línea de vida es: {longitud_linea_vida:.2f} metros")
 
         st.subheader("Coordenadas y ubicación a lo largo de la línea de vida")
-        for idx, (anclaje, dist) in enumerate(zip(anclajes, posiciones_lineales)):
-            st.write(f"Anclaje {idx + 1}: x = {anclaje[0]:.2f}, y = {anclaje[1]:.2f}, distancia = {dist:.2f} m")
+        df = pd.DataFrame({
+            "Anclaje": [f"A{i+1}" for i in range(len(anclajes))],
+            "X": [a[0] for a in anclajes],
+            "Y": [a[1] for a in anclajes],
+            "Distancia (m)": posiciones_lineales
+        })
+        st.dataframe(df)
+
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button("Descargar tabla de anclajes (CSV)", csv, "anclajes.csv", "text/csv")
 
         x_p, y_p = zip(*puntos)
         x_a, y_a = zip(*anclajes)
@@ -112,6 +122,10 @@ if modo == "Función":
         ax.legend()
         st.pyplot(fig)
 
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png")
+        st.download_button("Descargar gráfica (PNG)", buf.getvalue(), "grafica_linea_vida.png", "image/png")
+
 elif modo == "Lista de puntos":
     texto_puntos = st.text_area("Introduce puntos como [(x1, y1), (x2, y2), ...]", "[(0, 0), (5, 2), (9, 2), (12, 6)]")
 
@@ -122,8 +136,16 @@ elif modo == "Lista de puntos":
         st.write(f"La longitud total de la línea de vida es: {longitud_linea_vida:.2f} metros")
 
         st.subheader("Coordenadas y ubicación a lo largo de la línea de vida")
-        for idx, (anclaje, dist) in enumerate(zip(anclajes, posiciones_lineales)):
-            st.write(f"Anclaje {idx + 1}: x = {anclaje[0]:.2f}, y = {anclaje[1]:.2f}, distancia = {dist:.2f} m")
+        df = pd.DataFrame({
+            "Anclaje": [f"A{i+1}" for i in range(len(anclajes))],
+            "X": [a[0] for a in anclajes],
+            "Y": [a[1] for a in anclajes],
+            "Distancia (m)": posiciones_lineales
+        })
+        st.dataframe(df)
+
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button("Descargar tabla de anclajes (CSV)", csv, "anclajes.csv", "text/csv")
 
         x_p, y_p = zip(*lista_puntos)
         x_a, y_a = zip(*anclajes)
@@ -136,6 +158,10 @@ elif modo == "Lista de puntos":
         ax.grid(True)
         ax.legend()
         st.pyplot(fig)
+
+        buf = io.BytesIO()
+        fig.savefig(buf, format="png")
+        st.download_button("Descargar gráfica (PNG)", buf.getvalue(), "grafica_linea_vida.png", "image/png")
 
     except Exception as e:
         st.error(f"Error en el formato de los puntos: {e}")
