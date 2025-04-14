@@ -6,6 +6,7 @@ import io
 import pandas as pd
 from sympy import symbols, lambdify, sympify
 from fpdf import FPDF
+import tempfile
 
 
 def calcular_distancia(p1, p2):
@@ -14,103 +15,85 @@ def calcular_distancia(p1, p2):
 
 def calcular_longitud_linea_vida(anclajes):
     longitud = 0.0
-    distancias = [0.0]
     for i in range(1, len(anclajes)):
-        d = calcular_distancia(anclajes[i - 1], anclajes[i])
-        longitud += d
-        distancias.append(longitud)
-    return longitud, distancias
+        longitud += calcular_distancia(anclajes[i - 1], anclajes[i])
+    return longitud
 
 
-def segmento_dentro_rango(p1, p2, f_lambdified, paso=0.1, max_sep=0.5):
-    num_pasos = max(2, int(calcular_distancia(p1, p2) / paso))
-    for i in range(1, num_pasos):
-        t = i / num_pasos
-        x = p1[0] + t * (p2[0] - p1[0])
-        y = p1[1] + t * (p2[1] - p1[1])
-        y_func = f_lambdified(x)
-        if y - y_func < 0 or y - y_func > max_sep:
-            return False
-    return True
+def calcular_maxima_separacion(p1, p2, f, num_puntos=100):
+    x_vals = np.linspace(p1[0], p2[0], num_puntos)
+    y_linea = np.linspace(p1[1], p2[1], num_puntos)
+    y_funcion = f(x_vals)
+    distancias = np.abs(y_linea - y_funcion)
+    return np.max(distancias)
 
 
-def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima, max_sep):
+def generar_puntos_funcion(expr, x_min, x_max, distancia_maxima, separacion_maxima):
     x = symbols('x')
     f_expr = sympify(expr)
-    f_lambdified = lambdify(x, f_expr, 'numpy')
+    f = lambdify(x, f_expr, 'numpy')
 
-    puntos = []
-    anclajes = []
-    x_actual = x_min
+    x_vals = np.arange(x_min, x_max, distancia_maxima / 10)
+    y_vals = f(x_vals)
+    puntos = list(zip(x_vals, y_vals))
 
-    while x_actual <= x_max:
-        y_actual = float(f_lambdified(x_actual)) + 0.1
-        puntos.append((x_actual, float(f_lambdified(x_actual))))
-        anclajes.append((x_actual, y_actual))
-        x_actual += 0.1
-
-    anclajes_filtrados = [anclajes[0]]
+    anclajes = [puntos[0]]
     i = 0
-    while i < len(anclajes) - 1:
-        j = i + 1
-        while j < len(anclajes) and calcular_distancia(anclajes[i], anclajes[j]) <= distancia_maxima:
-            if segmento_dentro_rango(anclajes[i], anclajes[j], f_lambdified, paso=0.1, max_sep=max_sep):
-                j += 1
-            else:
+
+    while i < len(puntos) - 1:
+        for j in range(len(puntos) - 1, i, -1):
+            p1, p2 = puntos[i], puntos[j]
+            max_sep = calcular_maxima_separacion(p1, p2, f)
+            if max_sep <= separacion_maxima:
+                anclajes.append(p2)
+                i = j
                 break
-        anclajes_filtrados.append(anclajes[j - 1])
-        i = j - 1
+        else:
+            i += 1
 
-    longitud_linea_vida, posiciones_lineales = calcular_longitud_linea_vida(anclajes_filtrados)
-    return puntos, anclajes_filtrados, longitud_linea_vida, posiciones_lineales
+    longitud_linea_vida = calcular_longitud_linea_vida(anclajes)
 
+    posiciones = [0.0]
+    for i in range(1, len(anclajes)):
+        posiciones.append(posiciones[-1] + calcular_distancia(anclajes[i - 1], anclajes[i]))
 
-def generar_puntos_desde_lista(lista_puntos, distancia_maxima):
-    anclajes = [lista_puntos[0]]
-
-    for i in range(1, len(lista_puntos)):
-        p1, p2 = np.array(lista_puntos[i - 1]), np.array(lista_puntos[i])
-        segmento = p2 - p1
-        distancia_segmento = np.linalg.norm(segmento)
-        num_interpolaciones = math.floor(distancia_segmento / distancia_maxima)
-
-        for j in range(1, num_interpolaciones + 1):
-            punto_interpolado = p1 + segmento * (j * distancia_maxima / distancia_segmento)
-            anclajes.append(tuple(punto_interpolado))
-        anclajes.append(tuple(p2))
-
-    longitud_linea_vida, posiciones_lineales = calcular_longitud_linea_vida(anclajes)
-    return anclajes, longitud_linea_vida, posiciones_lineales
+    return list(zip(*puntos)), anclajes, longitud_linea_vida, posiciones
 
 
-def generar_pdf(df, img_data):
+def exportar_pdf(anclajes, posiciones, img_data):
     pdf = FPDF()
     pdf.add_page()
     pdf.set_font("Arial", size=12)
-
-    pdf.cell(200, 10, txt="Tabla de Anclajes", ln=True, align="C")
+    pdf.cell(200, 10, txt="Reporte de Anclajes - Línea de Vida", ln=True, align='C')
     pdf.ln(10)
 
-    for index, row in df.iterrows():
-        pdf.cell(200, 10, txt=f"{row['Anclaje']}: X = {row['X']:.2f}, Y = {row['Y']:.2f}, Distancia = {row['Distancia (m)']:.2f} m", ln=True)
+    pdf.cell(60, 10, "x", 1)
+    pdf.cell(60, 10, "y", 1)
+    pdf.cell(60, 10, "posición (m)", 1)
+    pdf.ln()
 
-    pdf.add_page()
-    pdf.cell(200, 10, txt="Gráfica de la Línea de Vida", ln=True, align="C")
+    for a, p in zip(anclajes, posiciones):
+        pdf.cell(60, 10, f"{a[0]:.2f}", 1)
+        pdf.cell(60, 10, f"{a[1]:.2f}", 1)
+        pdf.cell(60, 10, f"{p:.2f}", 1)
+        pdf.ln()
 
-    img_path = "temp_img.png"
-    with open(img_path, "wb") as f:
-        f.write(img_data)
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_img:
+        tmp_img.write(img_data)
+        tmp_img.flush()
+        pdf.image(tmp_img.name, x=10, y=None, w=180)
 
-    pdf.image(img_path, x=10, y=30, w=180)
-    output = io.BytesIO()
-    pdf.output(output)
-    return output.getvalue()
+    pdf_output = io.BytesIO()
+    pdf.output(pdf_output)
+    pdf_output.seek(0)
+    return pdf_output
+
 
 # STREAMLIT
 st.title("Diseñador de Línea de Vida para Trabajo en Altura")
-modo = st.selectbox("Modo de entrada", ["Función", "Lista de puntos"])
-distancia_maxima = st.number_input("Distancia máxima entre anclajes (m)", min_value=0.1, value=5.0)
-max_sep = st.number_input("Separación máxima permitida respecto a la cornisa (m)", min_value=0.1, value=0.5)
+modo = st.selectbox("Modo de entrada", ["Función"])
+distancia_maxima = st.number_input("Distancia mínima entre anclajes (m)", min_value=0.05, value=0.1)
+separacion_maxima = st.number_input("Separación máxima de la línea respecto a la cornisa (m)", min_value=0.1, value=0.5)
 
 if modo == "Función":
     expr = st.text_input("Introduce la función (en x)", "sin(x) * 3 + 5")
@@ -118,82 +101,37 @@ if modo == "Función":
     x_max = st.number_input("Valor máximo de x", value=20.0)
 
     if x_max > x_min:
-        puntos, anclajes, longitud_linea_vida, posiciones_lineales = generar_puntos_funcion(expr, x_min, x_max, distancia_maxima, max_sep)
+        puntos, anclajes, longitud_linea_vida, posiciones = generar_puntos_funcion(expr, x_min, x_max, distancia_maxima, separacion_maxima)
 
         st.write(f"La longitud total de la línea de vida es: {longitud_linea_vida:.2f} metros")
 
-        st.subheader("Coordenadas y ubicación a lo largo de la línea de vida")
-        df = pd.DataFrame({
-            "Anclaje": [f"A{i+1}" for i in range(len(anclajes))],
-            "X": [a[0] for a in anclajes],
-            "Y": [a[1] for a in anclajes],
-            "Distancia (m)": posiciones_lineales
+        df_anclajes = pd.DataFrame({
+            "x": [a[0] for a in anclajes],
+            "y": [a[1] for a in anclajes],
+            "posición sobre la línea (m)": posiciones
         })
-        st.dataframe(df)
 
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("Descargar tabla de anclajes (CSV)", csv, "anclajes.csv", "text/csv")
+        st.dataframe(df_anclajes)
 
-        x_p, y_p = zip(*puntos)
+        csv = df_anclajes.to_csv(index=False).encode('utf-8')
+        st.download_button("Descargar tabla de anclajes como CSV", data=csv, file_name="anclajes.csv", mime="text/csv")
+
+        x_p, y_p = puntos
         x_a, y_a = zip(*anclajes)
 
         fig, ax = plt.subplots()
-        ax.plot(x_p, y_p, label="Silueta (función)", color='gray')
+        ax.plot(x_p, y_p, label="Cornisa (función)", color='gray')
         ax.plot(x_a, y_a, 'o-', label="Línea de vida", color='red')
         ax.set_title("Línea de vida sobre función")
         ax.set_aspect('equal')
         ax.grid(True)
         ax.legend()
+
         st.pyplot(fig)
 
         buf = io.BytesIO()
         fig.savefig(buf, format="png")
-        img_data = buf.getvalue()
+        st.download_button("Descargar gráfica como PNG", data=buf.getvalue(), file_name="grafica.png", mime="image/png")
 
-        st.download_button("Descargar gráfica (PNG)", img_data, "grafica_linea_vida.png", "image/png")
-        pdf_bytes = generar_pdf(df, img_data)
-        st.download_button("Descargar reporte (PDF)", pdf_bytes, "reporte_linea_vida.pdf", "application/pdf")
-
-elif modo == "Lista de puntos":
-    texto_puntos = st.text_area("Introduce puntos como [(x1, y1), (x2, y2), ...]", "[(0, 0), (5, 2), (9, 2), (12, 6)]")
-
-    try:
-        lista_puntos = eval(texto_puntos)
-        anclajes, longitud_linea_vida, posiciones_lineales = generar_puntos_desde_lista(lista_puntos, distancia_maxima)
-
-        st.write(f"La longitud total de la línea de vida es: {longitud_linea_vida:.2f} metros")
-
-        st.subheader("Coordenadas y ubicación a lo largo de la línea de vida")
-        df = pd.DataFrame({
-            "Anclaje": [f"A{i+1}" for i in range(len(anclajes))],
-            "X": [a[0] for a in anclajes],
-            "Y": [a[1] for a in anclajes],
-            "Distancia (m)": posiciones_lineales
-        })
-        st.dataframe(df)
-
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("Descargar tabla de anclajes (CSV)", csv, "anclajes.csv", "text/csv")
-
-        x_p, y_p = zip(*lista_puntos)
-        x_a, y_a = zip(*anclajes)
-
-        fig, ax = plt.subplots()
-        ax.plot(x_p, y_p, '--', label="Silueta (puntos)", color='gray')
-        ax.plot(x_a, y_a, 'o-', label="Línea de vida", color='blue')
-        ax.set_title("Línea de vida sobre puntos")
-        ax.set_aspect('equal')
-        ax.grid(True)
-        ax.legend()
-        st.pyplot(fig)
-
-        buf = io.BytesIO()
-        fig.savefig(buf, format="png")
-        img_data = buf.getvalue()
-
-        st.download_button("Descargar gráfica (PNG)", img_data, "grafica_linea_vida.png", "image/png")
-        pdf_bytes = generar_pdf(df, img_data)
-        st.download_button("Descargar reporte (PDF)", pdf_bytes, "reporte_linea_vida.pdf", "application/pdf")
-
-    except Exception as e:
-        st.error(f"Error en el formato de los puntos: {e}")
+        pdf_bytes = exportar_pdf(anclajes, posiciones, buf.getvalue())
+        st.download_button("Descargar reporte completo en PDF", data=pdf_bytes, file_name="reporte_linea_vida.pdf", mime="application/pdf")
