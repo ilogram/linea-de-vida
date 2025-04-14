@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 from sympy import symbols, lambdify, sympify
-
+st.title("Diseñador de Línea de Vida - ACTUALIZADO 🚧")
 
 def calcular_distancia(p1, p2):
     return np.linalg.norm(np.array(p1) - np.array(p2))
